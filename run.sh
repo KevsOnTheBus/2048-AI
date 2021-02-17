@@ -10,6 +10,5 @@
 
 outFile="${1:0:-4}.out.txt"
 
-python3 2048.py <$1 >$outFile
-echo "Output printed in \"$outFile\""
-
+python3 2048.py <$1 | tee $outFile
+#echo "Output printed in \"$outFile\""

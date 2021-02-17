@@ -1,6 +1,6 @@
 # Kevin Ehlen
 # AI
-# Puzzle1: 2048
+# Puzzle2: 2048
 
 import sys  # for file read-in
 import copy # for deep copies in buildTree()
@@ -181,6 +181,24 @@ def moveDir(g, dir, noIns):
 
   return g
 
+# Makes a deep copy of a game
+def copyGame(g):
+  newG = Game()
+  newG.goal = g.goal
+  newG.gameSize.extend(g.gameSize)
+  newG.spawnVals.extend(g.spawnVals)
+  tempRow = []
+  for row in g.board:
+    tempRow = []
+    for col in row:
+      tempRow.append(col)
+    newG.board.append(tempRow)
+
+  newG.root = copy.deepcopy(g.root)
+  newG.movesHist.extend(g.movesHist)
+
+  return newG
+
 class State:
   def __init__(self, key):
     self.data = key
@@ -197,12 +215,14 @@ class State:
 
 # Add possible paths to the children
 def buildTree(g):
-  tempL = copy.deepcopy(g)  # Needed to not refrence orginal object
-  tempR = copy.deepcopy(g)
-  tempU = copy.deepcopy(g)
-  tempD = copy.deepcopy(g)
+  tempL = copyGame(g)  # Needed to not refrence orginal object
+  tempR = copyGame(g)
+  tempU = copyGame(g)
+  tempD = copyGame(g)
 
-  tempRoot = copy.deepcopy(g)
+  
+
+  tempRoot = copyGame(g)
   root = State(tempRoot)
 
   # Add possible paths
@@ -245,7 +265,7 @@ def printTree(root):
 
 
 def checkValidMove(state, dir):
-  tempGame = copy.deepcopy(state.data)
+  tempGame = copyGame(state.data)
   # If move has no change, then it is invalid
   if moveDir(tempGame, dir, True).board == state.data.board:
     return False
@@ -253,7 +273,7 @@ def checkValidMove(state, dir):
 
 # Performs the Breadth First Tree Search 
 # and returns the answer state
-def getOrder(g, root):
+def getOrder(root):
   # Base Case
   if root is None:
     return
@@ -265,6 +285,7 @@ def getOrder(g, root):
   while len(queue) > 0:
     # pop from the queue
     state = queue.pop(0)
+
 
     # Enqueue each child
     if state.child1 is not None:
@@ -304,6 +325,58 @@ def getOrder(g, root):
     rootChecked = True
 
 
+def boundedDFS(startS, depth):
+  depthHit = False
+  frontier = []
+  frontier.append(startS)
+
+  while frontier != []:
+    top = frontier.pop()
+
+    #printTree(top)
+
+    if len(top.data.movesHist) == depth:
+      if isGoalState(top.data) == True:
+        return top  # Found Goal
+      else:  # Check if has neighbors??
+        depthHit = True
+    else:
+      # Right to Left order
+      # Only append if valid state
+      newRoot = buildTree(top.data)
+
+      if checkValidMove(top, 'D') == True:
+        frontier.append(newRoot.child4)
+      if checkValidMove(top, 'U') == True:
+        frontier.append(newRoot.child3)
+      if checkValidMove(top, 'R') == True:
+        frontier.append(newRoot.child2)
+      if checkValidMove(top, 'L') == True:
+        frontier.append(newRoot.child1)
+
+  return depthHit
+
+
+
+def iterativeDeepeningDFS(root):
+  # Base Case
+  if root is None:
+    return
+
+  # if isGoalState(root.data) == True:
+  #   # Found Goal
+  #   return root
+
+  depth = 0
+  res = True
+
+  while res:
+    res = boundedDFS(root, depth)
+    if type(res) is State:
+      return res
+    depth += 1
+
+
 def main():
   # Timer start
   start_time = time.time()
@@ -313,7 +386,8 @@ def main():
 
   root1 = buildTree(g1) # Load in children states
 
-  root2 = getOrder(g1, root1) # Perform the BFTS
+  #root2 = getOrder(root1) # Perform the BFTS
+  root2 = iterativeDeepeningDFS(root1)
   print(int((time.time() - start_time)*1000000))  # Runtime in microseconds
   print(len(root2.data.movesHist))  # Number of 'swipes'
   # Print the moves
