@@ -1,12 +1,13 @@
 # Kevin Ehlen
 # AI
-# Puzzle3: 2048
+# Puzzle4: 2048
 
 import sys  # for file read-in
 import copy # for deep copies in buildTree()
 import time # for program runtime
 from queue import PriorityQueue # for GrBeFGS
 from itertools import count # for unique default value in the pq
+import math
 
 class Game:
   def __init__(self):
@@ -258,7 +259,7 @@ def checkValidMove(state, dir):
 
 
 # Determine the heuristic 
-# It has an emphasis on empty tiles and more larger tiles
+# It has an emphasis on empty tiles and more larger tiles and shorter length of paths
 def getScore(root):
   numEmpty = 0
   flatBoard = []
@@ -268,11 +269,21 @@ def getScore(root):
       flatBoard.append(tile)
   flatBoard.sort()
 
+  if root.data.goal <= 16:
+    scalar = math.log2(root.data.goal)
+  elif root.data.goal == 32:
+    scalar = 10
+  else:
+    scalar = 100000
+
   for i in range(len(flatBoard)-1):
-    flatBoard[1] = 2 ** int(flatBoard[1] / 16)  # / by 16 is simply to scale down exponent
+    flatBoard[1] = 2 ** (flatBoard[1] / 16)  # / by 16 is simply to scale down exponent
 
   # The pq finds smallest number, so / is necessary for an inverse
-  return root.data.goal / (((numEmpty+1) ** 100) + sum(flatBoard))
+  hVal = root.data.goal / (((numEmpty+1) ** 100) + sum(flatBoard))
+  gVal = len(root.data.movesHist) / scalar
+  #print("{} {}".format(hVal, gVal))
+  return hVal + gVal
 
 
 # Keeps a dictionary of all the visited states so no cycles are possible
@@ -289,8 +300,8 @@ def isVisited(bd):
 # as a backup to sort by if the scores tie.
 unique = count()
 
-# Implementation of GrBeFGS
-def greedyBFS(root):
+# Implementation of A*
+def aStar(root):
   score = getScore(root)
 
   q = PriorityQueue()
@@ -344,7 +355,7 @@ def main():
 
   root1 = buildTree(g1) # Load in children states
 
-  root2 = greedyBFS(root1)
+  root2 = aStar(root1)
 
   print(int((time.time() - start_time)*1000000))  # Runtime in microseconds
 
