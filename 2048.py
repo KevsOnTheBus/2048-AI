@@ -1,10 +1,12 @@
 # Kevin Ehlen
 # AI
-# Puzzle2: 2048
+# Puzzle3: 2048
 
 import sys  # for file read-in
 import copy # for deep copies in buildTree()
 import time # for program runtime
+from queue import PriorityQueue # for GrBeFGS
+from itertools import count # for unique default value in the pq
 
 class Game:
   def __init__(self):
@@ -14,6 +16,7 @@ class Game:
     self.board = []
     self.root = 0
     self.movesHist = []
+    self.score = 0
 
   # Read-in from the file
   def readFile(self):
@@ -53,11 +56,13 @@ class Game:
           if self.board[i][j] == self.board[i][j-1] and self.board[i][j] != 0:
             self.board[i][j] = 2 * self.board[i][j]
             self.board[i][j-1] = 0
+            self.score += self.board[i][j]
       elif dir == -1:
         for j in range(self.gameSize[1]-1):
           if self.board[i][j] == self.board[i][j+1] and self.board[i][j] != 0:
             self.board[i][j] = 2 * self.board[i][j]
             self.board[i][j+1] = 0
+            self.score += self.board[i][j]
 
   # Checks to see if other tiles in the same row as merged tiles 
   # and then moves them to directly after merged tile accordingly
@@ -138,8 +143,6 @@ def isGoalState(g):
 # Handles all of the functions for each move direction
 def moveDir(g, dir, noIns):
   if dir == 'R':
-    # move right
-    #g.merge(1)
     g.board = g.getMove(1)
     g.merge(1)
     g.moveAfterMerge(1)
@@ -148,7 +151,6 @@ def moveDir(g, dir, noIns):
     g.movesHist.append('R')
   elif dir == 'L':
     # move left
-    #g.merge(-1)
     g.board = g.getMove(-1)
     g.merge(-1)
     # Need check for other numbers in line to move after a merge
@@ -159,7 +161,6 @@ def moveDir(g, dir, noIns):
   elif dir == 'D':  
     # move down
     g.transpose()
-    #g.merge(1)
     g.board = g.getMove(1)
     g.merge(1)
     g.moveAfterMerge(1)
@@ -170,7 +171,6 @@ def moveDir(g, dir, noIns):
   elif dir == 'U':
     # move up
     g.transpose()
-    #g.merge(-1)
     g.board = g.getMove(-1)
     g.merge(-1)
     g.moveAfterMerge(-1)
@@ -196,6 +196,7 @@ def copyGame(g):
 
   newG.root = copy.deepcopy(g.root)
   newG.movesHist.extend(g.movesHist)
+  newG.score = copy.deepcopy(g.score)
 
   return newG
 
@@ -207,32 +208,37 @@ class State:
     self.child3 = None
     self.child4 = None
 
-  def addChildren(self,c1,c2,c3,c4):
+  def addC1(self,c1):
     self.child1 = State(c1) 
-    self.child2 = State(c2)
-    self.child3 = State(c3)
-    self.child4 = State(c4)
+  def addC2(self,c2):
+    self.child2 = State(c2) 
+  def addC3(self,c3):
+    self.child3 = State(c3) 
+  def addC4(self,c4):
+    self.child4 = State(c4) 
 
 # Add possible paths to the children
 def buildTree(g):
-  tempL = copyGame(g)  # Needed to not refrence orginal object
-  tempR = copyGame(g)
-  tempU = copyGame(g)
-  tempD = copyGame(g)
-
-  
-
-  tempRoot = copyGame(g)
-  root = State(tempRoot)
+  tempGame = copyGame(g)
+  root = State(tempGame)
 
   # Add possible paths
-  # List of games
-  root.addChildren(moveDir(tempL, 'L', False), moveDir(tempR, 'R', False), moveDir(tempU, 'U', False), moveDir(tempD, 'D', False))
+  if checkValidMove(root, 'L') == True:
+    tempL = copyGame(g)
+    root.addC1(moveDir(tempL, 'L', False))
+  if checkValidMove(root, 'R') == True:
+    tempR = copyGame(g)
+    root.addC2(moveDir(tempR, 'R', False))
+  if checkValidMove(root, 'U') == True:
+    tempU = copyGame(g)
+    root.addC3(moveDir(tempU, 'U', False))
+  if checkValidMove(root, 'D') == True:
+    tempD = copyGame(g)
+    root.addC4(moveDir(tempD, 'D', False))
 
   return root
 
 # Prints the answer state 
-# and was originaly for debugging purposes
 def printTree(root):
   # Base Case
   if root is None:
@@ -240,27 +246,6 @@ def printTree(root):
   for row in root.data.board:
     for tile in row:
       print(tile, end = " ")
-    print()
-
-  if root.child1 is not None:
-    # Print Child1
-    for row in root.child1.data.board:
-      print("\t", row)
-    print()
-  if root.child2 is not None:
-    # Print Child2
-    for row in root.child2.data.board:
-      print("\t", row)
-    print()
-  if root.child3 is not None:
-    # Print Child3
-    for row in root.child3.data.board:
-      print("\t", row)
-    print()
-  if root.child4 is not None:
-    # Print Child4
-    for row in root.child4.data.board:
-      print("\t", row)
     print()
 
 
@@ -271,110 +256,83 @@ def checkValidMove(state, dir):
     return False
   return True
 
-# Performs the Breadth First Tree Search 
-# and returns the answer state
-def getOrder(root):
-  # Base Case
-  if root is None:
-    return
-  queue = []
-  queue.append(root)
 
-  rootChecked = False
+# Determine the heuristic 
+# It has an emphasis on empty tiles and more larger tiles
+def getScore(root):
+  numEmpty = 0
+  flatBoard = []
 
-  while len(queue) > 0:
-    # pop from the queue
-    state = queue.pop(0)
+  for row in root.data.board:
+    for tile in row:
+      flatBoard.append(tile)
+  flatBoard.sort()
+
+  for i in range(len(flatBoard)-1):
+    flatBoard[1] = 2 ** int(flatBoard[1] / 16)  # / by 16 is simply to scale down exponent
+
+  # The pq finds smallest number, so / is necessary for an inverse
+  return root.data.goal / (((numEmpty+1) ** 100) + sum(flatBoard))
 
 
-    # Enqueue each child
-    if state.child1 is not None:
-      # If move is not valid, do not extend it (do not add to queue)
-      if checkValidMove(state, 'L') == True:
-        queue.append(state.child1)
-    if state.child2 is not None:
-      if checkValidMove(state, 'R') == True:
-        queue.append(state.child2)
-    if state.child3 is not None:
-      if checkValidMove(state, 'U') == True:
-        queue.append(state.child3)
-    if state.child4 is not None:
-      if checkValidMove(state, 'D') == True:
-        queue.append(state.child4)
+# Keeps a dictionary of all the visited states so no cycles are possible
+visitedBoards = {}
+def isVisited(bd):
+  # 2d lists are flattened to a string to be hashed
+  newBd = ''.join(str(item) for row in bd for item in row)
+  if newBd in visitedBoards:
+    return True
+  return False
 
-    # Check if state.data has goal state
-    # If not buildTree for it
-    if isGoalState(state.data) == True:
-      # Found Goal
-      return state
+
+# Increments for each state added to the pq 
+# as a backup to sort by if the scores tie.
+unique = count()
+
+# Implementation of GrBeFGS
+def greedyBFS(root):
+  score = getScore(root)
+
+  q = PriorityQueue()
+  q.put((score, next(unique), root))
+
+  while not q.empty():
+    next_item = q.get()
+    if isGoalState(next_item[2].data) == True:
+      # Goal is found
+      return next_item[2]
     else:
-      # The root is pre-loaded with children 
-      # so this is a one time check
-      if rootChecked == True:
-        newRoot = buildTree(state.data)
-        # If move is not valid, do not extend it (do not add to queue)
-        if checkValidMove(state, 'L') == True:
-          queue.append(newRoot.child1)
-        if checkValidMove(state, 'R') == True:
-          queue.append(newRoot.child2)
-        if checkValidMove(state, 'U') == True:
-          queue.append(newRoot.child3)
-        if checkValidMove(state, 'D') == True:
-          queue.append(newRoot.child4)
-    
-    rootChecked = True
+      newRoot = buildTree(next_item[2].data)
 
+      # Add the valid children to the pq
+      if newRoot.child1 is not None:
+        if isVisited(newRoot.child1.data.board) == False:
+          if checkValidMove(newRoot, 'L') == True:
+            visitedBoards.update({''.join(str(item) for row in newRoot.child1.data.board for item in row): None})
+            newScore = getScore(newRoot.child1)
+            q.put((newScore, next(unique), newRoot.child1))
 
-def boundedDFS(startS, depth):
-  depthHit = False
-  frontier = []
-  frontier.append(startS)
+      if newRoot.child2 is not None:
+        if isVisited(newRoot.child2.data.board) == False:
+          if checkValidMove(newRoot, 'R') == True:
+            visitedBoards.update({''.join(str(item) for row in newRoot.child2.data.board for item in row): None})
+            newScore = getScore(newRoot.child2)
+            q.put((newScore, next(unique), newRoot.child2))
 
-  while frontier != []:
-    top = frontier.pop()
+      if newRoot.child3 is not None:
+        if isVisited(newRoot.child3.data.board) == False:
+          if checkValidMove(newRoot, 'U') == True:
+            visitedBoards.update({''.join(str(item) for row in newRoot.child3.data.board for item in row): None})
+            newScore = getScore(newRoot.child3)
+            q.put((newScore, next(unique), newRoot.child3))
 
-    #printTree(top)
+      if newRoot.child4 is not None:
+        if isVisited(newRoot.child4.data.board) == False:
+          if checkValidMove(newRoot, 'D') == True:
+            visitedBoards.update({''.join(str(item) for row in newRoot.child4.data.board for item in row): None})
+            newScore = getScore(newRoot.child4)
+            q.put((newScore, next(unique), newRoot.child4))
 
-    if len(top.data.movesHist) == depth:
-      if isGoalState(top.data) == True:
-        return top  # Found Goal
-      else:  # Check if has neighbors??
-        depthHit = True
-    else:
-      # Right to Left order
-      # Only append if valid state
-      newRoot = buildTree(top.data)
-
-      if checkValidMove(top, 'D') == True:
-        frontier.append(newRoot.child4)
-      if checkValidMove(top, 'U') == True:
-        frontier.append(newRoot.child3)
-      if checkValidMove(top, 'R') == True:
-        frontier.append(newRoot.child2)
-      if checkValidMove(top, 'L') == True:
-        frontier.append(newRoot.child1)
-
-  return depthHit
-
-
-
-def iterativeDeepeningDFS(root):
-  # Base Case
-  if root is None:
-    return
-
-  # if isGoalState(root.data) == True:
-  #   # Found Goal
-  #   return root
-
-  depth = 0
-  res = True
-
-  while res:
-    res = boundedDFS(root, depth)
-    if type(res) is State:
-      return res
-    depth += 1
 
 
 def main():
@@ -386,16 +344,18 @@ def main():
 
   root1 = buildTree(g1) # Load in children states
 
-  #root2 = getOrder(root1) # Perform the BFTS
-  root2 = iterativeDeepeningDFS(root1)
+  root2 = greedyBFS(root1)
+
   print(int((time.time() - start_time)*1000000))  # Runtime in microseconds
-  print(len(root2.data.movesHist))  # Number of 'swipes'
-  # Print the moves
-  for move in root2.data.movesHist:
-    print(move, end = "")
-  print()
-  # Print the answer board
-  printTree(root2)
+
+  if root2 is not None: # Is none if no solution was found
+    print(len(root2.data.movesHist))  # Number of 'swipes'
+    # Print the moves
+    for move in root2.data.movesHist:
+      print(move, end = "")
+    print()
+    # Print the answer board
+    printTree(root2)
 
 
 if __name__ == "__main__":
