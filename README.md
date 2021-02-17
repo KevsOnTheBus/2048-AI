@@ -2,6 +2,8 @@
 
 AI algorithms for the game 2048
 
+Written by: Kevin Ehlen
+
 Algorithms
 ---
 
